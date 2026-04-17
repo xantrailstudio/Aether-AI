@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { ai, DEFAULT_MODEL } from '@/lib/gemini';
 import { useChatHistory, Message } from '@/hooks/use-chat-history';
 
 export default function ChatPage() {
@@ -71,21 +70,37 @@ export default function ChatPage() {
     try {
       // Prepare history for context
       const contents = updatedMessages.map(m => ({
-        role: m.role,
-        parts: [{ text: m.content }]
+        role: m.role === 'model' ? 'assistant' : 'user',
+        content: m.content
       }));
 
-      const response = await ai.models.generateContent({
-        model: DEFAULT_MODEL,
-        contents: contents,
-        config: {
-          systemInstruction: "You are Aether AI, a sophisticated and helpful AI assistant. You remember past conversations to provide better context. Your tone is professional yet approachable. Use markdown for formatting. If the user asks about past conversations, use the provided history to answer.",
+      const systemMessage = {
+        role: 'system',
+        content: "You are Aether AI, a sophisticated and helpful AI assistant. You remember past conversations to provide better context. Your tone is professional yet approachable. Use markdown for formatting. If the user asks about past conversations, use the provided history to answer."
+      };
+
+      const response = await fetch('https://text.pollinations.ai/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
         },
+        body: JSON.stringify({
+          messages: [systemMessage, ...contents],
+          model: 'openai',
+          seed: 42,
+          jsonMode: false
+        }),
       });
+
+      if (!response.ok) {
+        throw new Error('Failed to connect to the AI service');
+      }
+
+      const aiText = await response.text();
 
       const aiMessage: Message = {
         role: 'model',
-        content: response.text || "I'm sorry, I couldn't generate a response.",
+        content: aiText || "I'm sorry, I couldn't generate a response.",
         timestamp: Date.now(),
       };
 
